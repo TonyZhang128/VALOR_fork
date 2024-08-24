@@ -21,7 +21,7 @@ from utils.eval_metrics import segment_level, event_level
 
 def seed_everything(seed_value):
     np.random.seed(seed_value)
-    torch.manual_seed(seed_value)
+    torch.manual_seed(seed_value) 
     torch.cuda.manual_seed(seed_value)
     torch.cuda.manual_seed_all(seed_value)
 
