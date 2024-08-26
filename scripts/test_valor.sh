@@ -1,7 +1,7 @@
 python main_avvp.py \
 --mode test \
 --model MMIL_Net \
---model_name model_VALOR \
+--model_name model_VALOR_reproduce_0 \
 --audio_dir ./data/feats/vggish \
 --video_dir ./data/feats/res152 \
 --st_dir ./data/feats/r2plus1d_18 \

@@ -2,7 +2,7 @@ python main_avvp.py \
 --seed 1000 \
 --mode train \
 --model MMIL_Net \
---model_name model_VALOR_reproduce \
+--model_name model_VALOR_reproduce_0 \
 --batch_size 64 \
 --epochs 60 \
 --audio_dir ./data/feats/vggish \
@@ -27,3 +27,5 @@ python main_avvp.py \
 --norm_where post_norm \
 --v_pseudo_data_dir ./data/CLIP/segment_pseudo_labels \
 --a_pseudo_data_dir ./data/CLAP/segment_pseudo_labels \
+--use_wandb  \
+--wandb_project_name valor_reproduce \
