@@ -170,13 +170,18 @@ class MMIL_Net(nn.Module):
         frame_logits = self.fc_prob(x)                                  # (B, T, 2, C)
         frame_prob = torch.sigmoid(frame_logits)                        # (B, T, 2, C)
 
-        # attentive MMIL pooling
-        frame_att = torch.softmax(self.fc_frame_att(x), dim=1)          # (B, T, 2, C)
-        av_att = torch.softmax(self.fc_av_att(x), dim=2)                # (B, T, 2, C)
-        temporal_prob = (frame_att * frame_prob)
-        global_prob = (temporal_prob * av_att).sum(dim=2).sum(dim=1)      # (B, C)
+        # First max operation along dim=1 (time dimension)
+        time_max_values, _ = frame_prob.max(dim=1)  # (B, 2, C)
+        # Second max operation along dim=1 (modality dimension)
+        global_prob, _ = time_max_values.max(dim=1)  # (B, C)
 
-        a_prob = temporal_prob[:, :, 0, :].sum(dim=1)       # (B, C)
-        v_prob = temporal_prob[:, :, 1, :].sum(dim=1)       # (B, C)
+        # # attentive MMIL pooling
+        # frame_att = torch.softmax(self.fc_frame_att(x), dim=1)          # (B, T, 2, C)
+        # av_att = torch.softmax(self.fc_av_att(x), dim=2)                # (B, T, 2, C)
+        # temporal_prob = (frame_att * frame_prob)
+        # global_prob = (temporal_prob * av_att).sum(dim=2).sum(dim=1)      # (B, C)
 
-        return global_prob, a_prob, v_prob, frame_prob, frame_logits
+        # a_prob = temporal_prob[:, :, 0, :].sum(dim=1)       # (B, C)
+        # v_prob = temporal_prob[:, :, 1, :].sum(dim=1)       # (B, C)
+
+        return global_prob, _, _, frame_prob, frame_logits

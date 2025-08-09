@@ -4,7 +4,7 @@ python main_avvp.py `
 --seed 87 `
 --mode train `
 --model MMIL_Net `
---model_name model_VALOR++_reproduce `
+--model_name model_VALOR++_noMMIL `
 --batch_size 64 `
 --epochs 60 `
 --audio_dir ./data/CLAP/features `

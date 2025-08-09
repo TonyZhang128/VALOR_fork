@@ -3,7 +3,7 @@
 python main_avvp.py `
 --mode test `
 --model MMIL_Net `
---model_name model_VALOR++ `
+--model_name model_VALOR++_noMMIL `
 --audio_dir ./data/CLAP/features `
 --video_dir ./data/CLIP/features `
 --st_dir ./data/feats/r2plus1d_18 `
