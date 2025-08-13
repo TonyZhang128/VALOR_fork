@@ -79,13 +79,18 @@ def train(args, model1, model2, train_loader, optimizer1, optimizer2, criterion,
         output1.clamp_(min=1e-7, max=1 - 1e-7)
         output2.clamp_(min=1e-7, max=1 - 1e-7)
 
-        loss_video1 = criterion(output1, labels)
-        loss_video2 = criterion(output2, labels)
+        # loss_video1 = criterion(output1, labels)
+        # loss_video2 = criterion(output2, labels)
         
+        loss_video1, loss_video2 = loss_coteaching(output1, output2, labels, is_logist=True, forget_rate= 0.2 * (1 - epoch / args.epochs))        
+
+
         # loss_valor_a = F.binary_cross_entropy_with_logits(frame_logits[:, :, 0], audio_pseudo_labels)
         # loss_valor_v = F.binary_cross_entropy_with_logits(frame_logits[:, :, 1], visual_pseudo_labels)
-        loss_valor_a_1, loss_valor_a_2 = loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels)
-        loss_valor_v_1, loss_valor_v_2 = loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels)
+        loss_valor_a_1, loss_valor_a_2 = \
+            loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels, forget_rate= 0.2 * (1 - epoch / args.epochs))
+        loss_valor_v_1, loss_valor_v_2 = \
+            loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels, forget_rate= 0.2 * (1 - epoch / args.epochs))
         
         loss1 = loss_valor_a_1 + loss_valor_v_1 + loss_video1 
         loss2 = loss_valor_a_2 + loss_valor_v_2 + loss_video2
@@ -344,14 +349,14 @@ def main():
         args = parser.parse_args()
         
         if 1 < 0:
-            args.seed = 87
+            args.seed = 1000
             args.mode = "train"
             args.model = "MMIL_Net"
-            args.model_name = "model_VALOR++_denoise"
+            args.model_name = "model_VALOR_denoise_0813"
             args.batch_size = 64
             args.epochs = 60
-            args.audio_dir = "./data/CLAP/features"
-            args.video_dir = "./data/CLIP/features"
+            args.audio_dir = "./data/feats/vggish"
+            args.video_dir = "./data/feats/res152"
             args.st_dir = "./data/feats/r2plus1d_18"
             args.label_train = "./data/AVVP_train.csv"
             args.label_val = "./data/AVVP_val_pd.csv"
@@ -361,22 +366,22 @@ def main():
             args.scheduler = "warm_up_cos_anneal"
             args.warm_up_epoch = 10
             args.grad_norm = 1.0
-            args.lr = 3e-4
-            args.lr_min = 3e-6
+            args.lr = 1e-4
+            args.lr_min = 1e-6
             args.beta1 = 0.5
             args.eps = 1e-8
-            args.hidden_dim = 256
+            args.hidden_dim = 512
             args.nhead = 8
             args.ff_dim = 1024
-            args.num_layers = 4
+            args.num_layers = 1
             args.norm_where = "post_norm"
             args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
             args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
 
-        if 2 > 1:
+        if 2 < 1:
             args.mode = "test"
             args.model = "MMIL_Net"
-            args.model_name = "model_VALOR++_denoise"
+            args.model_name = "model_VALOR++_denoise_0813"
             args.audio_dir = "./data/CLAP/features"
             args.video_dir = "./data/CLIP/features"
             args.st_dir = "./data/feats/r2plus1d_18"
@@ -387,6 +392,24 @@ def main():
             args.nhead = 8
             args.ff_dim = 1024
             args.num_layers = 4
+            args.norm_where = "post_norm"
+            args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
+            args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
+        
+        if 3 > 2:
+            args.mode = "test"
+            args.model = "MMIL_Net"
+            args.model_name = "model_VALOR_denoise_0813"
+            args.audio_dir = "./data/feats/vggish"
+            args.video_dir = "./data/feats/res152"
+            args.st_dir = "./data/feats/r2plus1d_18"
+            args.label_train = "./data/AVVP_train.csv"
+            args.label_val = "./data/AVVP_val_pd.csv"
+            args.label_test = "./data/AVVP_test_pd.csv"
+            args.hidden_dim = 512
+            args.nhead = 8
+            args.ff_dim = 1024
+            args.num_layers = 1
             args.norm_where = "post_norm"
             args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
             args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
@@ -544,8 +567,8 @@ def main():
         test_dataset = LLP_dataset(mode=args.mode, label=args.label_test, audio_dir=args.audio_dir, res152_dir=args.video_dir,
                                     r2plus1d_18_dir=args.st_dir, v_pseudo_data_dir=args.v_pseudo_data_dir, a_pseudo_data_dir=args.a_pseudo_data_dir)
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
-        # model2.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_best.pt")))
-        model2.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_epoch_1_11.pt")))
+        model2.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_best.pt")))
+        # model2.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_epoch_1_46.pt")))
 
 
         # Evaluation
