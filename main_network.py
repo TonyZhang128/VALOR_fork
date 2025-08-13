@@ -120,8 +120,8 @@ class MMIL_Net(nn.Module):
         super(MMIL_Net, self).__init__()
 
         self.fc_prob = nn.Linear(args.hidden_dim, 25)
-        self.fc_frame_att = nn.Linear(args.hidden_dim, 25)
-        self.fc_av_att = nn.Linear(args.hidden_dim, 25)
+        # self.fc_frame_att = nn.Linear(args.hidden_dim, 25)
+        # self.fc_av_att = nn.Linear(args.hidden_dim, 25)
 
         self.fc_a =  nn.Linear(args.input_a_dim, args.hidden_dim)
 
