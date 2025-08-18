@@ -85,15 +85,23 @@ def train(args, model1, model2, train_loader, optimizer1, optimizer2, criterion,
         loss_video1, loss_video2 = loss_coteaching(output1, output2, labels, is_logist=True, forget_rate= 0.2 * (1 - epoch / args.epochs))        
 
 
-        # loss_valor_a = F.binary_cross_entropy_with_logits(frame_logits[:, :, 0], audio_pseudo_labels)
-        # loss_valor_v = F.binary_cross_entropy_with_logits(frame_logits[:, :, 1], visual_pseudo_labels)
+        # loss_valor_a_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 0], audio_pseudo_labels)
+        # loss_valor_v_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 1], visual_pseudo_labels)
+        
+        # loss_valor_a_2 = F.binary_cross_entropy_with_logits(frame_logits2[:, :, 0], audio_pseudo_labels)
+        # loss_valor_v_2 = F.binary_cross_entropy_with_logits(frame_logits2[:, :, 1], visual_pseudo_labels)
+
+        
         loss_valor_a_1, loss_valor_a_2 = \
-            loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels, forget_rate= 0.2 * (1 - epoch / args.epochs))
+            loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels, forget_rate= args.ratio * (1 - epoch / args.epochs))
         loss_valor_v_1, loss_valor_v_2 = \
-            loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels, forget_rate= 0.2 * (1 - epoch / args.epochs))
+            loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels, forget_rate= args.ratio * (1 - epoch / args.epochs))
         
         loss1 = loss_valor_a_1 + loss_valor_v_1 + loss_video1 
         loss2 = loss_valor_a_2 + loss_valor_v_2 + loss_video2
+        # loss1 = loss_valor_a + loss_valor_v + loss_video1 
+        # loss2 = loss_valor_a + loss_valor_v + loss_video2
+
         
         loss1.backward()
         loss2.backward()
@@ -277,163 +285,27 @@ def eval(args, model, data_loader, gt_csv_dir, criterion, device):
     return F_scores, val_loss
 
 
-def main():
-    # Training settings
-    if 1 > 0:
-        parser = argparse.ArgumentParser(description='Official Implementation of VALOR')
-        parser.add_argument("--audio_dir", type=str, default='./data/feats/vggish',
-                            help="audio features dir")
-        parser.add_argument("--video_dir", type=str, default='./data/feats/res152',
-                            help="2D visual features dir")
-        parser.add_argument("--st_dir", type=str, default='./data/feats/r2plus1d_18',
-                            help="3D visual features dir")
-        parser.add_argument("--v_pseudo_data_dir", type=str, default='./data/feats_CLIP_large/framewise_pseudo_labels',
-                            help="visual segment-level pseudo labels dir")
-        parser.add_argument("--a_pseudo_data_dir", type=str, default='./data/feats_CLAP_new/framewise_pseudo_labels',
-                            help="audio segment-level pseudo labels dir")
+def main(args):
+    if args.model_name == None:
+        args.model_name = args.model
+    if 'CLAP' in args.audio_dir:
+        print('reset args.input_a_dim')
+        args.input_a_dim = 768
+    if 'CLIP' in args.video_dir:
+        print('reset args.input_v_dim')
+        args.input_v_dim = 768             # 1024 or 768 (before visual projection / after visual projection)
+    print('args =', args)
 
-        parser.add_argument("--label_train", type=str, default="./data/AVVP_train.csv",
-                            help="weak train csv file")
-        parser.add_argument("--label_val", type=str, default="./data/AVVP_val_pd.csv",
-                            help="weak val csv file")
-        parser.add_argument("--label_test", type=str, default="./data/AVVP_test_pd.csv",
-                            help="weak test csv file")
+    if args.mode == 'train':
+        assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
 
-        parser.add_argument('--seed', type=int, default=1)
-        parser.add_argument('--gpu', type=str, default='0')
-        parser.add_argument("--mode", type=str, default='train', choices=['train', 'val', 'test'],
-                            help="which mode to use")
-        parser.add_argument('--batch_size', type=int, default=64)
-        parser.add_argument('--epochs', type=int, default=60)
-        parser.add_argument('--optimizer', type=str, default='adamw')
-        parser.add_argument('--lr', type=float, default=1e-4)
-        parser.add_argument('--grad_norm', type=float, default=1.0,
-                            help='the value for gradient clipping (0 means no gradient clipping)')
-
-        # optimizer hyper-parameters
-        parser.add_argument('--weight_decay', type=float, default=1e-3,
-                            help='weight decay for optimizer')
-        parser.add_argument('--beta1', type=float, default=0.5)
-        parser.add_argument('--beta2', type=float, default=0.999)
-        parser.add_argument('--eps', type=float, default=1e-8)
-
-        # scheduler hyper-parameters
-        parser.add_argument('--scheduler', type=str, default='steplr', help='which scheduler to use')
-        parser.add_argument('--stepsize', type=int, default=10, help='step size of learning scheduler')
-        parser.add_argument('--gamma', type=float, default=0.1, help='gamma of learning scheduler')
-        parser.add_argument('--warm_up_epoch', type=int, default=5, help='the number of epochs for warm up')
-        parser.add_argument('--lr_min', type=float, default=1e-6, help='the minimum lr for lr decay')
-
-        # model hyper-parameters
-        parser.add_argument("--model", type=str, default='MMIL_Net', help="which model to use")
-        parser.add_argument("--input_v_dim", type=int, default=2048)
-        parser.add_argument("--input_a_dim", type=int, default=128)
-        parser.add_argument("--hidden_dim", type=int, default=512)
-        parser.add_argument("--nhead", type=int, default=8)
-        parser.add_argument("--ff_dim", type=int, default=1024)
-        parser.add_argument("--num_layers", type=int, default=1)
-        parser.add_argument("--norm_where", type=str, default="post_norm", choices=['post_norm', 'pre_norm'])
-
-        parser.add_argument("--model_name", type=str,
-                            help="the name for the model")
-        parser.add_argument("--model_save_dir", type=str, default='models/',
-                            help="where to save the trained model")
-
-        # wandb configurations
-        parser.add_argument("--use_wandb", action="store_true",
-                            help="use wandb or not")
-        parser.add_argument("--wandb_project_name", type=str, default='Baseline')
-        parser.add_argument("--wandb_run_name", type=str)
-
-
-        args = parser.parse_args()
-        
-        if 1 < 0:
-            args.seed = 1000
-            args.mode = "train"
-            args.model = "MMIL_Net"
-            args.model_name = "model_VALOR_denoise_0813"
-            args.batch_size = 64
-            args.epochs = 60
-            args.audio_dir = "./data/feats/vggish"
-            args.video_dir = "./data/feats/res152"
-            args.st_dir = "./data/feats/r2plus1d_18"
-            args.label_train = "./data/AVVP_train.csv"
-            args.label_val = "./data/AVVP_val_pd.csv"
-            args.label_test = "./data/AVVP_test_pd.csv"
-            args.optimizer = "adamw"
-            args.weight_decay = 1e-3
-            args.scheduler = "warm_up_cos_anneal"
-            args.warm_up_epoch = 10
-            args.grad_norm = 1.0
-            args.lr = 1e-4
-            args.lr_min = 1e-6
-            args.beta1 = 0.5
-            args.eps = 1e-8
-            args.hidden_dim = 512
-            args.nhead = 8
-            args.ff_dim = 1024
-            args.num_layers = 1
-            args.norm_where = "post_norm"
-            args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
-            args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
-
-        if 2 < 1:
-            args.mode = "test"
-            args.model = "MMIL_Net"
-            args.model_name = "model_VALOR++_denoise_0813"
-            args.audio_dir = "./data/CLAP/features"
-            args.video_dir = "./data/CLIP/features"
-            args.st_dir = "./data/feats/r2plus1d_18"
-            args.label_train = "./data/AVVP_train.csv"
-            args.label_val = "./data/AVVP_val_pd.csv"
-            args.label_test = "./data/AVVP_test_pd.csv"
-            args.hidden_dim = 256
-            args.nhead = 8
-            args.ff_dim = 1024
-            args.num_layers = 4
-            args.norm_where = "post_norm"
-            args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
-            args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
-        
-        if 3 > 2:
-            args.mode = "test"
-            args.model = "MMIL_Net"
-            args.model_name = "model_VALOR_denoise_0813"
-            args.audio_dir = "./data/feats/vggish"
-            args.video_dir = "./data/feats/res152"
-            args.st_dir = "./data/feats/r2plus1d_18"
-            args.label_train = "./data/AVVP_train.csv"
-            args.label_val = "./data/AVVP_val_pd.csv"
-            args.label_test = "./data/AVVP_test_pd.csv"
-            args.hidden_dim = 512
-            args.nhead = 8
-            args.ff_dim = 1024
-            args.num_layers = 1
-            args.norm_where = "post_norm"
-            args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
-            args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
-            
-        if args.model_name == None:
-            args.model_name = args.model
-        if 'CLAP' in args.audio_dir:
-            print('reset args.input_a_dim')
-            args.input_a_dim = 768
-        if 'CLIP' in args.video_dir:
-            print('reset args.input_v_dim')
-            args.input_v_dim = 768             # 1024 or 768 (before visual projection / after visual projection)
-        print('args =', args)
-
-        if args.mode == 'train':
-            assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
-
-            os.mkdir(os.path.join(args.model_save_dir, args.model_name))
-            args_dict = args.__dict__
-            with open(os.path.join(args.model_save_dir, args.model_name, "arguments.txt"), 'w') as f:
-                f.writelines('-------------------------start-------------------------\n')
-                for key, value in args_dict.items():
-                    f.writelines(key + ': ' + str(value) + '\n')
-                f.writelines('--------------------------end--------------------------\n')
+        os.mkdir(os.path.join(args.model_save_dir, args.model_name))
+        args_dict = args.__dict__
+        with open(os.path.join(args.model_save_dir, args.model_name, "arguments.txt"), 'w') as f:
+            f.writelines('-------------------------start-------------------------\n')
+            for key, value in args_dict.items():
+                f.writelines(key + ': ' + str(value) + '\n')
+            f.writelines('--------------------------end--------------------------\n')
 
     # Initialize wandb
     if args.use_wandb:
@@ -582,4 +454,177 @@ def main():
         
 
 if __name__ == '__main__':
-    main()
+    # Training settings
+    parser = argparse.ArgumentParser(description='Official Implementation of VALOR')
+    parser.add_argument("--audio_dir", type=str, default='./data/feats/vggish',
+                        help="audio features dir")
+    parser.add_argument("--video_dir", type=str, default='./data/feats/res152',
+                        help="2D visual features dir")
+    parser.add_argument("--st_dir", type=str, default='./data/feats/r2plus1d_18',
+                        help="3D visual features dir")
+    parser.add_argument("--v_pseudo_data_dir", type=str, default='./data/feats_CLIP_large/framewise_pseudo_labels',
+                        help="visual segment-level pseudo labels dir")
+    parser.add_argument("--a_pseudo_data_dir", type=str, default='./data/feats_CLAP_new/framewise_pseudo_labels',
+                        help="audio segment-level pseudo labels dir")
+
+    parser.add_argument("--label_train", type=str, default="./data/AVVP_train.csv",
+                        help="weak train csv file")
+    parser.add_argument("--label_val", type=str, default="./data/AVVP_val_pd.csv",
+                        help="weak val csv file")
+    parser.add_argument("--label_test", type=str, default="./data/AVVP_test_pd.csv",
+                        help="weak test csv file")
+
+    parser.add_argument('--seed', type=int, default=1)
+    parser.add_argument('--gpu', type=str, default='0')
+    parser.add_argument("--mode", type=str, default='train', choices=['train', 'val', 'test'],
+                        help="which mode to use")
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--epochs', type=int, default=60)
+    parser.add_argument('--optimizer', type=str, default='adamw')
+    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--grad_norm', type=float, default=1.0,
+                        help='the value for gradient clipping (0 means no gradient clipping)')
+
+    # optimizer hyper-parameters
+    parser.add_argument('--weight_decay', type=float, default=1e-3,
+                        help='weight decay for optimizer')
+    parser.add_argument('--beta1', type=float, default=0.5)
+    parser.add_argument('--beta2', type=float, default=0.999)
+    parser.add_argument('--eps', type=float, default=1e-8)
+
+    # scheduler hyper-parameters
+    parser.add_argument('--scheduler', type=str, default='steplr', help='which scheduler to use')
+    parser.add_argument('--stepsize', type=int, default=10, help='step size of learning scheduler')
+    parser.add_argument('--gamma', type=float, default=0.1, help='gamma of learning scheduler')
+    parser.add_argument('--warm_up_epoch', type=int, default=5, help='the number of epochs for warm up')
+    parser.add_argument('--lr_min', type=float, default=1e-6, help='the minimum lr for lr decay')
+
+    # model hyper-parameters
+    parser.add_argument("--model", type=str, default='MMIL_Net', help="which model to use")
+    parser.add_argument("--input_v_dim", type=int, default=2048)
+    parser.add_argument("--input_a_dim", type=int, default=128)
+    parser.add_argument("--hidden_dim", type=int, default=512)
+    parser.add_argument("--nhead", type=int, default=8)
+    parser.add_argument("--ff_dim", type=int, default=1024)
+    parser.add_argument("--num_layers", type=int, default=1)
+    parser.add_argument("--norm_where", type=str, default="post_norm", choices=['post_norm', 'pre_norm'])
+
+    parser.add_argument("--model_name", type=str,
+                        help="the name for the model")
+    parser.add_argument("--model_save_dir", type=str, default='models/',
+                        help="where to save the trained model")
+
+    # wandb configurations
+    parser.add_argument("--use_wandb", action="store_true",
+                        help="use wandb or not")
+    parser.add_argument("--wandb_project_name", type=str, default='Baseline')
+    parser.add_argument("--wandb_run_name", type=str)
+    
+    parser.add_argument("--ratio", type=float, default=0.2)
+
+
+
+    args = parser.parse_args()
+    
+    if 1 < 0:
+        args.seed = 1000
+        args.mode = "train"
+        args.model = "MMIL_Net"
+        args.model_name = "model_VALOR_0813"
+        args.batch_size = 64
+        args.epochs = 60
+        args.audio_dir = "./data/feats/vggish"
+        args.video_dir = "./data/feats/res152"
+        args.st_dir = "./data/feats/r2plus1d_18"
+        args.label_train = "./data/AVVP_train.csv"
+        args.label_val = "./data/AVVP_val_pd.csv"
+        args.label_test = "./data/AVVP_test_pd.csv"
+        args.optimizer = "adamw"
+        args.weight_decay = 1e-3
+        args.scheduler = "warm_up_cos_anneal"
+        args.warm_up_epoch = 10
+        args.grad_norm = 1.0
+        args.lr = 3e-4
+        args.lr_min = 3e-6
+        args.beta1 = 0.5
+        args.eps = 1e-8
+        args.hidden_dim = 512
+        args.nhead = 8
+        args.ff_dim = 1024
+        args.num_layers = 1
+        args.norm_where = "post_norm"
+        args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
+        args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
+
+    if 1 < -1:
+        args.seed = 87
+        args.mode = "train"
+        args.model = "MMIL_Net"
+        args.model_name = "model_VALOR++"
+        args.batch_size = 64
+        args.epochs = 60
+        args.audio_dir = "./data/CLAP/features"
+        args.video_dir = "./data/CLIP/features"
+        args.st_dir = "./data/feats/r2plus1d_18"
+        args.label_train = "./data/AVVP_train.csv"
+        args.label_val = "./data/AVVP_val_pd.csv"
+        args.label_test = "./data/AVVP_test_pd.csv"
+        args.optimizer = "adamw"
+        args.weight_decay = 1e-3
+        args.scheduler = "warm_up_cos_anneal"
+        args.warm_up_epoch = 10
+        args.grad_norm = 1.0
+        args.lr = 3e-4
+        args.lr_min = 3e-6
+        args.beta1 = 0.5
+        args.eps = 1e-8
+        args.hidden_dim = 256
+        args.nhead = 8
+        args.ff_dim = 1024
+        args.num_layers = 4
+        args.norm_where = "post_norm"
+        args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
+        args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
+
+    if 2 > 1:
+        args.mode = "test"
+        args.model = "MMIL_Net"
+        args.model_name = "model_VALOR++_denoise_0813"
+        args.audio_dir = "./data/CLAP/features"
+        args.video_dir = "./data/CLIP/features"
+        args.st_dir = "./data/feats/r2plus1d_18"
+        args.label_train = "./data/AVVP_train.csv"
+        args.label_val = "./data/AVVP_val_pd.csv"
+        args.label_test = "./data/AVVP_test_pd.csv"
+        args.hidden_dim = 256
+        args.nhead = 8
+        args.ff_dim = 1024
+        args.num_layers = 4
+        args.norm_where = "post_norm"
+        args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
+        args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
+    
+    if 3 < 2:
+        args.mode = "test"
+        args.model = "MMIL_Net"
+        args.model_name = "model_VALOR_denoise_0813_1"
+        args.audio_dir = "./data/feats/vggish"
+        args.video_dir = "./data/feats/res152"
+        args.st_dir = "./data/feats/r2plus1d_18"
+        args.label_train = "./data/AVVP_train.csv"
+        args.label_val = "./data/AVVP_val_pd.csv"
+        args.label_test = "./data/AVVP_test_pd.csv"
+        args.hidden_dim = 512
+        args.nhead = 8
+        args.ff_dim = 1024
+        args.num_layers = 1
+        args.norm_where = "post_norm"
+        args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
+        args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
+    
+    ratio = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+
+    for i in range(len(ratio)):
+        args.ratio = ratio[i]
+        args.model_name = "model_VALOR++_denoise_ratio_" + str(ratio[i])
+        main(args)
