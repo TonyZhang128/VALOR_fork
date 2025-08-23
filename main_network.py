@@ -128,6 +128,15 @@ class MMIL_Net(nn.Module):
         self.fc_st = nn.Linear(512, args.hidden_dim)
         self.fc_fusion = nn.Linear(args.hidden_dim * 2, args.hidden_dim)
 
+        if args.pooling == 'MMIL':
+            self.fc_frame_att = nn.Linear(self.args.hidden_dim, 25)
+            self.fc_av_att = nn.Linear(self.args.hidden_dim, 25)
+        elif args.pooling == 'Agg': 
+            self.fc_frame_att = nn.Linear(10, 1)
+            self.fc_av_att = nn.Linear(2, 1)
+            self.fc_cls = nn.Linear(self.args.hidden_dim, 25)
+        
+        
         self.hat_encoder = Encoder(HANLayer(d_model=args.hidden_dim, nhead=args.nhead, dim_feedforward=args.ff_dim),
                                    num_layers=args.num_layers,
                                    hidden_dim=args.hidden_dim)
@@ -139,9 +148,6 @@ class MMIL_Net(nn.Module):
     
     def MMIL(self, x, frame_prob):
         # attentive MMIL pooling
-        self.fc_frame_att = nn.Linear(self.args.hidden_dim, 25)
-        self.fc_av_att = nn.Linear(self.args.hidden_dim, 25)
-        
         frame_att = torch.softmax(self.fc_frame_att(x), dim=1)          # (B, T, 2, C)
         av_att = torch.softmax(self.fc_av_att(x), dim=2)                # (B, T, 2, C)
         temporal_prob = (frame_att * frame_prob)
@@ -160,10 +166,6 @@ class MMIL_Net(nn.Module):
         return global_max_values
     
     def MaxAggregating(self, x): # (B, T, 2, dim)
-        self.fc_frame_att = nn.Linear(x.size(1), 1)
-        self.fc_av_att = nn.Linear(2, 1)
-        self.fc_cls = nn.Linear(self.args.hidden_dim, 25)
-        
         x_trans = torch.transpose(x, 1, 3)          # (B, dim, 2, T)
         x = self.fc_frame_att(x_trans).squeeze(-1)  # (B, dim, 2)
         x = self.fc_av_att(x).squeeze(-1)           # (B, C)
@@ -203,8 +205,8 @@ class MMIL_Net(nn.Module):
         frame_logits = self.fc_prob(x)                                  # (B, T, 2, C)
         frame_prob = torch.sigmoid(frame_logits)                        # (B, T, 2, C)
 
+        a_prob, v_prob, = frame_logits[:, :, 0, :].sum(dim=1), frame_logits[:, :, 1, :].sum(dim=1)
         
-
         if self.args.pooling == 'Max':
             global_prob = self.MaxPooling(frame_prob)
         elif self.args.pooling == 'Agg':
@@ -213,5 +215,5 @@ class MMIL_Net(nn.Module):
             global_prob = self.MMIL(x, frame_prob)
         else:
             raise ValueError('pooling method not supported')
-            
-        return global_prob, _, _, frame_prob, frame_logits
+        
+        return global_prob, a_prob, v_prob, frame_prob, frame_logits

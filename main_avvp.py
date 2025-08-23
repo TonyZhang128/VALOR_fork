@@ -295,9 +295,9 @@ def main(args):
     print('args =', args)
 
     if args.mode == 'train':
-        assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
+        # assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
 
-        os.mkdir(os.path.join(args.model_save_dir, args.model_name))
+        # os.mkdir(os.path.join(args.model_save_dir, args.model_name))
         args_dict = args.__dict__
         with open(os.path.join(args.model_save_dir, args.model_name, "arguments.txt"), 'w') as f:
             f.writelines('-------------------------start-------------------------\n')
@@ -584,7 +584,7 @@ if __name__ == '__main__':
         args.ff_dim = 1024
         args.num_layers = 4
         args.norm_where = "post_norm"
-        args.pooling = "MMIL"
+        args.pooling = "Agg"
         args.enable_denoise = True
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
@@ -630,5 +630,5 @@ if __name__ == '__main__':
 
     for i in range(len(ratio)):
         args.ratio = ratio[i]
-        args.model_name = "model_VALOR++_videonodenoise_" + str(ratio[i])
+        args.model_name = "model_VALOR++_test_" + str(ratio[i])
         main(args)      
