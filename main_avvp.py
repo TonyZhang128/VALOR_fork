@@ -79,28 +79,26 @@ def train(args, model1, model2, train_loader, optimizer1, optimizer2, criterion,
         output1.clamp_(min=1e-7, max=1 - 1e-7)
         output2.clamp_(min=1e-7, max=1 - 1e-7)
 
-        # loss_video1 = criterion(output1, labels)
-        # loss_video2 = criterion(output2, labels)
         
-        loss_video1, loss_video2 = loss_coteaching(output1, output2, labels, is_logist=True, forget_rate= 0.2 * (1 - epoch / args.epochs))        
+        loss_video1 = criterion(output1, labels)
+        loss_video2 = criterion(output2, labels)
+        
+        # loss_video1, loss_video2 = loss_coteaching(output1, output2, labels, is_logist=True, forget_rate= args.ratio  * (1 - epoch / args.epochs)) #  * (1 - epoch / args.epochs)       
 
-
-        # loss_valor_a_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 0], audio_pseudo_labels)
-        # loss_valor_v_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 1], visual_pseudo_labels)
+        if args.enable_denoise:
+            loss_valor_a_1, loss_valor_a_2 = \
+                loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels, forget_rate= args.ratio  * (1 - epoch / args.epochs)) #  * (1 - epoch / args.epochs)
+            loss_valor_v_1, loss_valor_v_2 = \
+                loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels, forget_rate= args.ratio  * (1 - epoch / args.epochs)) #  * (1 - epoch / args.epochs)
+        else:
+            loss_valor_a_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 0], audio_pseudo_labels)
+            loss_valor_v_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 1], visual_pseudo_labels)
         
-        # loss_valor_a_2 = F.binary_cross_entropy_with_logits(frame_logits2[:, :, 0], audio_pseudo_labels)
-        # loss_valor_v_2 = F.binary_cross_entropy_with_logits(frame_logits2[:, :, 1], visual_pseudo_labels)
-
-        
-        loss_valor_a_1, loss_valor_a_2 = \
-            loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels, forget_rate= args.ratio * (1 - epoch / args.epochs))
-        loss_valor_v_1, loss_valor_v_2 = \
-            loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels, forget_rate= args.ratio * (1 - epoch / args.epochs))
-        
+            loss_valor_a_2 = F.binary_cross_entropy_with_logits(frame_logits2[:, :, 0], audio_pseudo_labels)
+            loss_valor_v_2 = F.binary_cross_entropy_with_logits(frame_logits2[:, :, 1], visual_pseudo_labels)
+            
         loss1 = loss_valor_a_1 + loss_valor_v_1 + loss_video1 
         loss2 = loss_valor_a_2 + loss_valor_v_2 + loss_video2
-        # loss1 = loss_valor_a + loss_valor_v + loss_video1 
-        # loss2 = loss_valor_a + loss_valor_v + loss_video2
 
         
         loss1.backward()
@@ -427,7 +425,7 @@ def main(args):
         val_dataset = LLP_dataset(mode='val', label=args.label_val, audio_dir=args.audio_dir, res152_dir=args.video_dir,
                                     r2plus1d_18_dir=args.st_dir, v_pseudo_data_dir=args.v_pseudo_data_dir, a_pseudo_data_dir=args.a_pseudo_data_dir)
         val_loader  = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
-        model.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_best.pt")))
+        model.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_best.pt"), weights_only=True))
 
         # Evaluation
         F_scores_val, _ = eval(args, model, val_loader, './data', criterion=None, device=device)
@@ -439,7 +437,8 @@ def main(args):
         test_dataset = LLP_dataset(mode=args.mode, label=args.label_test, audio_dir=args.audio_dir, res152_dir=args.video_dir,
                                     r2plus1d_18_dir=args.st_dir, v_pseudo_data_dir=args.v_pseudo_data_dir, a_pseudo_data_dir=args.a_pseudo_data_dir)
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=1, pin_memory=True)
-        model2.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_best.pt")))
+        model2.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_best.pt"), weights_only=True))
+
         # model2.load_state_dict(torch.load(os.path.join(args.model_save_dir, args.model_name, "checkpoint_epoch_1_46.pt")))
 
 
@@ -521,7 +520,9 @@ if __name__ == '__main__':
     parser.add_argument("--wandb_run_name", type=str)
     
     parser.add_argument("--ratio", type=float, default=0.2)
-
+    parser.add_argument("--pooling", type=str, default='Agg', choices=['Agg', 'Max', 'MMIL'])
+    parser.add_argument("--enable_denoise", action="store_true")
+    parser.add_argument('--ratio_list', type=int, nargs='+', help='传入一个ratio列表，例如 --ratio_list 0 0.05 0.1 0.15 0.2 0.25 0.3')
 
 
     args = parser.parse_args()
@@ -556,7 +557,7 @@ if __name__ == '__main__':
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
 
-    if 1 < -1:
+    if 1 > -1:
         args.seed = 87
         args.mode = "train"
         args.model = "MMIL_Net"
@@ -583,10 +584,12 @@ if __name__ == '__main__':
         args.ff_dim = 1024
         args.num_layers = 4
         args.norm_where = "post_norm"
+        args.pooling = "MMIL"
+        args.enable_denoise = True
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
 
-    if 2 > 1:
+    if 2 < 1:
         args.mode = "test"
         args.model = "MMIL_Net"
         args.model_name = "model_VALOR++_denoise_0813"
@@ -622,9 +625,10 @@ if __name__ == '__main__':
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
     
-    ratio = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+    # ratio = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
+    ratio = [0.25]
 
     for i in range(len(ratio)):
         args.ratio = ratio[i]
-        args.model_name = "model_VALOR++_denoise_ratio_" + str(ratio[i])
-        main(args)
+        args.model_name = "model_VALOR++_videonodenoise_" + str(ratio[i])
+        main(args)      

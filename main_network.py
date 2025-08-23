@@ -118,10 +118,9 @@ class MMIL_Net(nn.Module):
 
     def __init__(self, args):
         super(MMIL_Net, self).__init__()
-
+        self.args = args 
         self.fc_prob = nn.Linear(args.hidden_dim, 25)
-        # self.fc_frame_att = nn.Linear(args.hidden_dim, 25)
-        # self.fc_av_att = nn.Linear(args.hidden_dim, 25)
+        
 
         self.fc_a =  nn.Linear(args.input_a_dim, args.hidden_dim)
 
@@ -137,6 +136,40 @@ class MMIL_Net(nn.Module):
         self.input_v_dim = args.input_v_dim     # 2048: ResNet152, 768: CLIP large
         self.input_a_dim = args.input_a_dim     # 128: VGGish, 512: CLAP
         self.hidden_dim = args.hidden_dim
+    
+    def MMIL(self, x, frame_prob):
+        # attentive MMIL pooling
+        self.fc_frame_att = nn.Linear(self.args.hidden_dim, 25)
+        self.fc_av_att = nn.Linear(self.args.hidden_dim, 25)
+        
+        frame_att = torch.softmax(self.fc_frame_att(x), dim=1)          # (B, T, 2, C)
+        av_att = torch.softmax(self.fc_av_att(x), dim=2)                # (B, T, 2, C)
+        temporal_prob = (frame_att * frame_prob)
+        global_prob = (temporal_prob * av_att).sum(dim=2).sum(dim=1)      # (B, C)
+
+        a_prob = temporal_prob[:, :, 0, :].sum(dim=1)       # (B, C)
+        v_prob = temporal_prob[:, :, 1, :].sum(dim=1)       # (B, C)
+        
+        return global_prob
+    
+    def MaxPooling(self, x):
+        # First max operation along dim=1 (time dimension)
+        time_max_values, _ = x.max(dim=1)  # (B, 2, C)
+        # Second max operation along dim=1 (modality dimension)
+        global_max_values, _ = time_max_values.max(dim=1)  # (B, C)
+        return global_max_values
+    
+    def MaxAggregating(self, x): # (B, T, 2, dim)
+        self.fc_frame_att = nn.Linear(x.size(1), 1)
+        self.fc_av_att = nn.Linear(2, 1)
+        self.fc_cls = nn.Linear(self.args.hidden_dim, 25)
+        
+        x_trans = torch.transpose(x, 1, 3)          # (B, dim, 2, T)
+        x = self.fc_frame_att(x_trans).squeeze(-1)  # (B, dim, 2)
+        x = self.fc_av_att(x).squeeze(-1)           # (B, C)
+        
+        return x
+
 
     def forward(self, audio, visual, visual_st):
 
@@ -170,18 +203,15 @@ class MMIL_Net(nn.Module):
         frame_logits = self.fc_prob(x)                                  # (B, T, 2, C)
         frame_prob = torch.sigmoid(frame_logits)                        # (B, T, 2, C)
 
-        # First max operation along dim=1 (time dimension)
-        time_max_values, _ = frame_prob.max(dim=1)  # (B, 2, C)
-        # Second max operation along dim=1 (modality dimension)
-        global_prob, _ = time_max_values.max(dim=1)  # (B, C)
+        
 
-        # # attentive MMIL pooling
-        # frame_att = torch.softmax(self.fc_frame_att(x), dim=1)          # (B, T, 2, C)
-        # av_att = torch.softmax(self.fc_av_att(x), dim=2)                # (B, T, 2, C)
-        # temporal_prob = (frame_att * frame_prob)
-        # global_prob = (temporal_prob * av_att).sum(dim=2).sum(dim=1)      # (B, C)
-
-        # a_prob = temporal_prob[:, :, 0, :].sum(dim=1)       # (B, C)
-        # v_prob = temporal_prob[:, :, 1, :].sum(dim=1)       # (B, C)
-
+        if self.args.pooling == 'Max':
+            global_prob = self.MaxPooling(frame_prob)
+        elif self.args.pooling == 'Agg':
+            global_prob = self.MaxAggregating(frame_logits)
+        elif self.args.pooling == 'MMIL':
+            global_prob = self.MMIL(x, frame_prob)
+        else:
+            raise ValueError('pooling method not supported')
+            
         return global_prob, _, _, frame_prob, frame_logits
