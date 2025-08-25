@@ -25,5 +25,8 @@ python main_avvp.py \
 --ff_dim 1024 \
 --num_layers 4 \
 --norm_where post_norm \
+--pooling "MMIL" \
+--enable_denoise \
 --v_pseudo_data_dir ./data/CLIP/segment_pseudo_labels \
 --a_pseudo_data_dir ./data/CLAP/segment_pseudo_labels \
+# --ratio_list 0 0.05 0.1 0.15 0.2 0.25 0.3
