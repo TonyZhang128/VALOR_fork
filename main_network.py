@@ -131,7 +131,7 @@ class MMIL_Net(nn.Module):
         if args.pooling == 'MMIL':
             self.fc_frame_att = nn.Linear(self.args.hidden_dim, 25)
             self.fc_av_att = nn.Linear(self.args.hidden_dim, 25)
-        elif args.pooling == 'Agg': 
+        elif args.pooling == 'Agg' or args.pooling == 'Agg_': 
             self.fc_frame_att = nn.Linear(10, 1)
             self.fc_av_att = nn.Linear(2, 1)
             self.fc_cls = nn.Linear(self.args.hidden_dim, 25)
@@ -165,12 +165,14 @@ class MMIL_Net(nn.Module):
         global_max_values, _ = time_max_values.max(dim=1)  # (B, C)
         return global_max_values
     
-    def MaxAggregating(self, x): # (B, T, 2, dim)
-        x_trans = torch.transpose(x, 1, 3)          # (B, dim, 2, T)
-        x = self.fc_frame_att(x_trans).squeeze(-1)  # (B, dim, 2)
+    def MaxAggregating(self, x): # (B, T, 2, C)
+        x_trans = torch.transpose(x, 1, 3)          # (B, C, 2, T)
+        x = self.fc_frame_att(x_trans).squeeze(-1)  # (B, C, 2)
         x = self.fc_av_att(x).squeeze(-1)           # (B, C)
-        
+        # 避免原地操作，使用非原地版本的sigmoid
+        x = torch.sigmoid(x)
         return x
+    
 
 
     def forward(self, audio, visual, visual_st):

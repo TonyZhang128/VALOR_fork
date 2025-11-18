@@ -13,5 +13,6 @@ python main_avvp.py \
 --ff_dim 1024 \
 --num_layers 4 \
 --norm_where post_norm \
+--pooling "MMIL" \
 --v_pseudo_data_dir ./data/CLIP/segment_pseudo_labels \
 --a_pseudo_data_dir ./data/CLAP/segment_pseudo_labels \

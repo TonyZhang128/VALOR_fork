@@ -57,7 +57,7 @@ def get_evaluation_result_table(mode, F_scores_dict):
     return f_scores_tb
 
 
-def train(args, model1, model2, train_loader, optimizer1, optimizer2, criterion, epoch, device):
+def train(args, model1, model2, train_loader, ratios_list, optimizer1, optimizer2, criterion, epoch, device):
     model1.train()
     model2.train()
     train_loss1 = {'total': 0, 'loss_video': 0, 'loss_valor_v': 0, 'loss_valor_a': 0, 'loss_all': 0}
@@ -76,8 +76,8 @@ def train(args, model1, model2, train_loader, optimizer1, optimizer2, criterion,
         
         output1, _, _, _, frame_logits1 = model1(audios, video_res_feats, video_3d_feats)
         output2, _, _, _, frame_logits2 = model2(audios, video_res_feats, video_3d_feats)
-        output1.clamp_(min=1e-7, max=1 - 1e-7)
-        output2.clamp_(min=1e-7, max=1 - 1e-7)
+        output1 = output1.clamp(min=1e-7, max=1 - 1e-7)
+        output2 = output2.clamp(min=1e-7, max=1 - 1e-7)
 
         
         loss_video1 = criterion(output1, labels)
@@ -86,10 +86,14 @@ def train(args, model1, model2, train_loader, optimizer1, optimizer2, criterion,
         # loss_video1, loss_video2 = loss_coteaching(output1, output2, labels, is_logist=True, forget_rate= args.ratio  * (1 - epoch / args.epochs)) #  * (1 - epoch / args.epochs)       
 
         if args.enable_denoise:
+            #  args.ratio  * (1 - epoch / args.epochs)
+            #  args.ratio  * (min(epoch / args.epoch_Tk), 1)
+            #  args.ratio
+            
             loss_valor_a_1, loss_valor_a_2 = \
-                loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels, forget_rate= args.ratio  * (1 - epoch / args.epochs)) #  * (1 - epoch / args.epochs)
+                loss_coteaching(frame_logits1[:, :, 0], frame_logits2[:, :, 0], audio_pseudo_labels, forget_rate= ratios_list[epoch-1]) # 
             loss_valor_v_1, loss_valor_v_2 = \
-                loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels, forget_rate= args.ratio  * (1 - epoch / args.epochs)) #  * (1 - epoch / args.epochs)
+                loss_coteaching(frame_logits1[:, :, 1], frame_logits2[:, :, 1], visual_pseudo_labels, forget_rate= ratios_list[epoch-1]) #  
         else:
             loss_valor_a_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 0], audio_pseudo_labels)
             loss_valor_v_1 = F.binary_cross_entropy_with_logits(frame_logits1[:, :, 1], visual_pseudo_labels)
@@ -296,7 +300,9 @@ def main(args):
 
     if args.mode == 'train':
         assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
+        assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
 
+        os.mkdir(os.path.join(args.model_save_dir, args.model_name))
         os.mkdir(os.path.join(args.model_save_dir, args.model_name))
         args_dict = args.__dict__
         with open(os.path.join(args.model_save_dir, args.model_name, "arguments.txt"), 'w') as f:
@@ -371,9 +377,13 @@ def main(args):
 
             cur_lr = optimizer1.param_groups[0]['lr']
             start_time = time.time()
-            train_loss_dict1, train_loss_dict2 = train(args, model1, model2, train_loader, optimizer1, optimizer2, criterion, epoch, device)
-            # elapse_time = time.time() - start_time
-            # print('train_time =', elapse_time)
+            
+            ratios_list = [args.ratio] * args.epochs
+            ratios_list[:args.epoch_Tk] = np.linspace(0, args.ratio, args.epoch_Tk).tolist()
+            ratios_list[40:] = [num/2 for num in ratios_list[40:]]
+            
+            train_loss_dict1, train_loss_dict2 = train(args, model1, model2, train_loader, ratios_list, optimizer1, optimizer2, criterion, epoch, device)
+
 
             if args.scheduler != 'warm_up_cos_anneal':
                 scheduler1.step()
@@ -384,8 +394,8 @@ def main(args):
             # F_scores2, val_loss_dict2 = F_scores1, val_loss_dict1
             elapse_time = time.time() - start_time
             
-            torch.save(model1.state_dict(), os.path.join(args.model_save_dir, args.model_name, "checkpoint_epoch_1_{}.pt".format(epoch)))
-            torch.save(model2.state_dict(), os.path.join(args.model_save_dir, args.model_name, "checkpoint_epoch_2_{}.pt".format(epoch)))
+            # torch.save(model1.state_dict(), os.path.join(args.model_save_dir, args.model_name, "checkpoint_epoch_1_{}.pt".format(epoch)))
+            # torch.save(model2.state_dict(), os.path.join(args.model_save_dir, args.model_name, "checkpoint_epoch_2_{}.pt".format(epoch)))
             
             if F_scores1['Seg-type'] > best_F['Seg-type']:
                 best_F = F_scores1
@@ -523,11 +533,11 @@ if __name__ == '__main__':
     parser.add_argument("--pooling", type=str, default='Agg', choices=['Agg', 'Max', 'MMIL'])
     parser.add_argument("--enable_denoise", action="store_true")
     parser.add_argument('--ratio_list', type=int, nargs='+', help='传入一个ratio列表，例如 --ratio_list 0 0.05 0.1 0.15 0.2 0.25 0.3')
-
+    parser.add_argument("--epoch_Tk", type=int, default=10, help='drop ratio increase epoches')
 
     args = parser.parse_args()
     
-    if 1 < 0:
+    if 1 == 0:
         args.seed = 1000
         args.mode = "train"
         args.model = "MMIL_Net"
@@ -557,7 +567,7 @@ if __name__ == '__main__':
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
 
-    if 1 < -1:
+    if 1 > -1:
         args.seed = 87
         args.mode = "train"
         args.model = "MMIL_Net"
@@ -584,12 +594,12 @@ if __name__ == '__main__':
         args.ff_dim = 1024
         args.num_layers = 4
         args.norm_where = "post_norm"
-        args.pooling = "Agg"
+        args.pooling = "MMIL"
         args.enable_denoise = True
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
 
-    if 2 > 1:
+    if 2 < 1:
         args.mode = "test"
         args.model = "MMIL_Net"
         args.model_name = "model_VALOR++_denoise_0813"
@@ -607,7 +617,7 @@ if __name__ == '__main__':
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
     
-    if 3 < 2:
+    if 3 == 2:
         args.mode = "test"
         args.model = "MMIL_Net"
         args.model_name = "model_VALOR_denoise_0813_1"
@@ -626,9 +636,9 @@ if __name__ == '__main__':
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
     
     # ratio = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
-    ratio = [0.1]
+    ratio = [0.25]
 
     for i in range(len(ratio)):
         args.ratio = ratio[i]
-        args.model_name = "model_VALOR++_Agg_" + str(ratio[i])
+        args.model_name = "model_VALOR++_test_" + str(ratio[i])
         main(args)      
