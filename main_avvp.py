@@ -295,9 +295,9 @@ def main(args):
     print('args =', args)
 
     if args.mode == 'train':
-        # assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
+        assert not os.path.exists(os.path.join(args.model_save_dir, args.model_name)), "{} already exists. Please specify another model_name.".format(args.model_name)
 
-        # os.mkdir(os.path.join(args.model_save_dir, args.model_name))
+        os.mkdir(os.path.join(args.model_save_dir, args.model_name))
         args_dict = args.__dict__
         with open(os.path.join(args.model_save_dir, args.model_name, "arguments.txt"), 'w') as f:
             f.writelines('-------------------------start-------------------------\n')
@@ -557,7 +557,7 @@ if __name__ == '__main__':
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
 
-    if 1 > -1:
+    if 1 < -1:
         args.seed = 87
         args.mode = "train"
         args.model = "MMIL_Net"
@@ -589,7 +589,7 @@ if __name__ == '__main__':
         args.v_pseudo_data_dir = "./data/CLIP/segment_pseudo_labels"
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
 
-    if 2 < 1:
+    if 2 > 1:
         args.mode = "test"
         args.model = "MMIL_Net"
         args.model_name = "model_VALOR++_denoise_0813"
@@ -626,9 +626,9 @@ if __name__ == '__main__':
         args.a_pseudo_data_dir = "./data/CLAP/segment_pseudo_labels"
     
     # ratio = [0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3]
-    ratio = [0.25]
+    ratio = [0.1]
 
     for i in range(len(ratio)):
         args.ratio = ratio[i]
-        args.model_name = "model_VALOR++_test_" + str(ratio[i])
+        args.model_name = "model_VALOR++_Agg_" + str(ratio[i])
         main(args)      
